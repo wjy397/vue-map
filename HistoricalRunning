@@ -1,0 +1,261 @@
+<template>
+	<div class="play-all-warp" :style="{'width':(wrapWidth+150)+'px'}">
+                    <div class="playbtn" @click="clickPlay()">
+                            <img src="@/assets/historyRun/playbtn.png" v-show="!isPlay">
+                            <img src="@/assets/historyRun/stopbtn.png" v-show="isPlay">
+                    </div>
+                    <div class="canvas-warp" :style="{'width':(wrapWidth+pointWith)+'px'}">
+                        <canvas id="canDom" :width="wrapWidth" height="100" class="custom-canvas"></canvas> 
+                        <div class="dray-point" :style="{'left':drayPointLeft+'px'}"  @mousedown.stop.prevent="handleDownLineCanvas">
+                            <img src="@/assets/historyRun/drayPoint.png">
+                            <div class="time-show">
+                                {{showTime}}
+                            </div>
+                        </div>
+                    </div>
+                  
+	</div>
+</template>
+
+<script>
+import {
+  matchesSelectorToParentElements,
+  addEvent,
+  removeEvent
+} from "@/utils/dom";
+	export default {
+        props:{
+            controlWidth:{
+                type: Number
+            },
+            pointsProps:{type:Array}
+        },
+		data() {
+			return {
+                // y轴数据
+                points : [],//{x:'09:30',y:30},{x:'09:31',y:48},{x:'09:32',y:56},{x:'09:33',y:67},{x:'09:34',y:88},{x:'09:35',y:22},{x:'09:36',y:55}
+                // 指针拖拽距离
+                drayPointLeft:0,
+                // 指针宽
+                pointWith:11,                
+                // 鼠标拖拽
+                mouseClickCanvas:{},
+                // canvas宽
+                wrapWidth:600,
+                // 是否正在运行
+                isPlay:false,
+                // 播放定时器
+                timerRun:null,
+                showTime:'loading'
+
+			}
+		},
+		mounted() {
+            // 窗口变化触发
+            // addEvent(window, "resize", this.checkParentSize);
+            // showTime 初始化
+
+		},
+		methods: {
+            // 初始化画布
+                initCanvas(){
+                            let self = this;
+                            var width = self.wrapWidth, height = 100;
+                            // 计算y最大值
+                            let maxV = self.points[0]['y'];
+                            for(let j=1;j<self.points.length;j++){
+                                    if(self.points[j]['y']>maxV){
+                                            maxV = self.points[j]['y'];
+                                    }
+                            }
+
+                            //计算y轴增量
+                            var yStep = height / maxV;
+                            console.log(maxV);
+                            var domCan = document.getElementById("canDom");
+                            var g = domCan.getContext("2d");
+
+                            g.beginPath();
+                            g.lineWidth = 3;
+                            g.strokeStyle = "#43FFB6";
+                            g.shadowBlur = 5; // 设置模糊度
+                            g.shadowColor = "rgba(67,255,182,0.6)"; // 设置阴影颜色                            
+                            // 将横坐标间距根据points长度等分
+                            var x_space = width / (self.points.length - 1);//水平点的间隙像素           
+                            var xLen = 0;
+                            //开始画图的位置
+                            g.moveTo(0,  height - self.points[0]['y'] * yStep);
+                            // 点数大于2
+                            if(self.points.length>2){
+                                        let i;
+                                        for (i = 1; i < self.points.length - 2; i ++)
+                                        {
+                                            var yValue = self.points[i]['y'];//纵坐标值
+                                            var yPont = height - yValue * yStep;//用总共度减去  因为canvas坐标是反向的
+
+                                            var yValue1 = self.points[i+1]['y'];//纵坐标值
+                                            var yPont1= height - yValue1 * yStep;   
+
+                                            xLen += x_space;
+                                            var xc = (xLen + xLen+x_space) / 2;
+                                            var yc = (yPont + yPont1) / 2;
+                                
+                                            g.quadraticCurveTo(xLen, yPont, xc, yc);
+                                            // console.log('xLen:'+xLen+' yPont:'+yPont+' xc:'+xc+' yc:'+yc);
+                                        }
+                                        // 计算最后两个
+                                        let len = self.points.length-2;
+                                        var yPontlast2= height - self.points[i]['y'] * yStep;  
+                                        var yPontlast1= height - self.points[i+1]['y'] * yStep;  
+                                        g.quadraticCurveTo(xLen+x_space, yPontlast2, xLen+x_space*2,yPontlast1);
+                                        // console.log('xLen+x_space:'+(xLen+x_space)+' yPontlast2:'+yPont+' x_space*2:'+x_space*2+' yPontlast1:'+yPontlast1);
+                                        g.stroke();
+                                        g.closePath();  
+                            }else{
+                                g.lineTo (xLen=x_space,height - self.points[1]['y'] * yStep);       //设置末端状态
+                                g.stroke();               //进行绘制
+
+                            }
+   
+                },//end init
+                // 点击播放 
+                clickPlay(){
+                    let self = this;
+                    self.isPlay =!self.isPlay;
+                    if(self.isPlay){
+                            self.timerRun= setInterval(function(){
+                                // 判断是否到头 到头按钮变成播放
+                                if(self.drayPointLeft +2<=self.wrapWidth&&self.drayPointLeft +2>=0){
+                                        self.drayPointLeft = self.drayPointLeft +2;
+                                        // 计算显示时间
+                                        self.computeShowTime();
+                                }else{
+                                    self.isPlay=false;
+                                    clearInterval(self.timerRun);
+                                }
+                                    
+                            },100);
+                    }else{
+                          this.$emit('controlPause')
+                          clearInterval(self.timerRun);
+                          self.timerRun = null;      
+                    }
+                },
+                // 计算显示时间
+                computeShowTime(){
+                    let self = this;
+                    // x轴间距
+                    let space_x =self.wrapWidth / (self.points.length - 1);
+                    // 根据left 和间距 算下标
+                    let index = Math.floor(self.drayPointLeft/space_x);
+                    self.showTime=self.points[index]['x'];
+                    this.$emit('controlPlay',index)
+                },
+                beforeDestroy() {
+                    removeEvent(window, "resize", this.checkParentSize);
+                    clearInterval(this.timerRun);
+                    this.timerRun = null;
+                },
+                checkParentSize() {
+          
+                    let self = this;
+                    self.wrapWidth =   document.body.clientWidth-500;		
+      
+                },                
+                // 指针移动事件
+                canvasLineMove(e){
+                    const mouseClickCanvas = this.mouseClickCanvas;
+                    let tmpDeltaX = mouseClickCanvas.mouseX - (e.touches ? e.touches[0].pageX : e.pageX);
+                    // console.log('tmp::'+tmpDeltaX)
+                    let tmp_left = this.mouseClickCanvas.drayPointLeft - tmpDeltaX;		
+                    if(tmp_left>=0 && tmp_left <=this.wrapWidth){
+                            this.drayPointLeft = tmp_left;
+                            // 计算显示时间
+                            this.computeShowTime();
+                    }	
+		            // console.log('drayPointLeft::'+this.drayPointLeft)	
+                },
+                canvasLineUp(){
+                        removeEvent(document.documentElement, "mousemove", this.canvasLineMove);
+                },
+                handleDownLineCanvas(e){
+                        this.mouseClickCanvas.mouseX = e.touches ? e.touches[0].pageX : e.pageX;
+                	    this.mouseClickCanvas.drayPointLeft = this.drayPointLeft;
+                        addEvent(document.documentElement, "mousemove", this.canvasLineMove);
+                        addEvent(document.documentElement, "mouseup", this.canvasLineUp);
+                },	                
+		},
+        watch: {
+            pointsProps: {
+            immediate: true,    
+            handler (val) {
+                if(val.length===0){
+                        return;
+                }
+                this.points=val;
+                // 初始化显示时间
+                this.showTime = this.points[0]['x'];
+                // 初始化画布
+                this.initCanvas();                
+            }
+            }
+        }
+
+	}
+</script>
+
+<style scoped="" lang="less">
+.play-all-warp{
+        height:200px;
+        background-color:grey;
+        display:flex;
+        align-items: center;
+        justify-content: center;
+        background:rgba(255,255,255,1);
+        box-shadow:0px 10px 20px 0px rgba(79,100,176,0.24);
+        border-radius:6px;        
+}
+.playbtn{
+    width:40px;
+    height:40px;
+    background:rgba(24,24,57,1);
+    box-shadow:0px 10px 20px 0px rgba(79,100,176,0.24);
+    border-radius:50%;
+    cursor: pointer;
+    margin-right: 15px;
+    display:flex;
+    justify-content: center;
+    align-items: center;
+}
+.custom-canvas{
+        background:rgba(255,255,255,1);
+        position:absolute;
+        bottom: 0;
+        right: 0;
+}
+.canvas-warp{
+    position:relative;
+    height:120px;
+    background-color: white;
+    .dray-point{
+        position:absolute;
+        width:22px;
+        height:114px;
+        bottom: 0;
+        display: flex;
+        cursor: pointer;
+        .time-show{
+            height:20px;
+            line-height: 20px;
+            background:rgba(24,24,57,1);
+            box-shadow:0px 4px 6px 0px rgba(79,100,176,0.24);
+            border-radius:10px;   
+            padding-left: 5px;
+            padding-right: 5px;
+            font-size:5px;
+            color:rgba(254,254,255,1);                     
+        }
+    }
+
+}
+</style>
