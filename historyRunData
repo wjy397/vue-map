@@ -1,0 +1,124 @@
+<template>
+	<div >
+		<div id="map"></div>
+			<HistoricalRunning  class="controlPanle" :points-props='pointData' @controlPlay='mapPlay'  @controlPause='mapPause' />
+
+	</div>
+</template>
+
+<script>
+	import {
+		utilsMixin
+	} from '@/utils/mixin'
+    import HistoricalRunning from "@/components/HistoricalRunning.vue";
+    import { styleJson } from '../mapIndex/mapStyle.json'
+	export default {
+		name: 'historyRunData',
+		mixins: [utilsMixin],
+		components: {
+			HistoricalRunning
+		},
+		data() {
+			return {
+					controlWidth:0,
+					centerPoint:null,
+					pointData:[]
+			}
+		},
+		mounted() {
+			this.init();
+			let my_div = document.getElementById("map");
+			let style = window.getComputedStyle(my_div, null);
+            this.controlWidth = parseInt(style.getPropertyValue("width"), 10);
+			// let clientHeight=(document.documentElement.clientHeight)-78
+			// document.getElementById('view').style.height=clientHeight+'px'	
+			// window.onresize = function() { // 定义窗口大小变更通知事件
+			// 	let clientHeight=(document.documentElement.clientHeight)-78
+			// 	document.getElementById('view').style.height=clientHeight+'px'
+			// };
+			
+		},
+		destroyed() {
+
+		},
+		methods: {
+			init() {
+				   let self = this;
+					this.map = new BMap.Map("map", {enableMapClick:false});
+					var mPoint = new BMap.Point(121.621358, 38.919664);
+					this.map.centerAndZoom(mPoint, 15);
+					this.map.setCurrentCity("大连");         
+					this.map.enableDragging();
+					this.map.enableScrollWheelZoom(true);  
+					this.map.setMapStyle({styleJson: styleJson});
+					// 通过DrivingRoute获取一条路线的point  
+					var driving = new BMap.DrivingRoute(this.map);  
+					driving.search(new BMap.Point(121.50377, 38.942754), new BMap.Point(121.482786, 38.926588));  
+					driving.setSearchCompleteCallback(function() {  
+								//得到路线上的所有point  
+								let points = driving.getResults().getPlan(0).getRoute(0).getPath();  //getResults返回最近一次检索的结果  getPlan返回索引指定的方案。索引0表示第一条方案DrivingPolicy
+																								//getRoute返回方案中索引指定的线路。索引0表示第一条线路  getPath返回路线的地理坐标点数组
+								//画面移动到起点和终点的中间  
+								self.centerPoint = new BMap.Point((points[0].lng + points[points.length - 1].lng) / 2, (points[0].lat + points[points.length - 1].lat) / 2);  
+								self.map.panTo(self.centerPoint);  //panTo()方法将让地图平滑移动至新中心点，如果移动距离超过了当前地图区域大小，则地图会直跳到该点
+								// //连接所有点  
+								self.map.addOverlay(new BMap.Polyline(points, {strokeColor: "#2B36D8", strokeWeight: 3, strokeOpacity: 1}));  
+
+								// 制造整理传给控制器的假数据  {x:时间:y:速度,jw:经纬度}
+								for(let i=0;i<points.length;i++){
+									self.pointData.push(
+										{
+											x:'09:'+i,
+											y:Math.round(Math.random()*100),
+											jw:points[i]
+										}
+									)
+								}
+								//显示小车子  
+								self.label = new BMap.Label("", {offset: new BMap.Size(-20, -20)});  
+								self.car = new BMap.Marker(points[0]);  
+								self.car.setLabel(self.label);  
+								self.map.addOverlay(self.car);  
+						});  //end callback		
+						
+						
+			 },
+			 mapPlay(index){
+				//  debugger
+				   let self = this;
+					var point = self.pointData[index]['jw'];  
+					if(index > 0) {  
+						self.map.addOverlay(new BMap.Polyline([self.pointData[index-1]['jw'], point], {strokeColor: "red", strokeWeight: 1, strokeOpacity: 1}));  
+					}  
+					self.label.setContent("经度: " + point.lng + "<br>纬度: " + point.lat);  
+					self.car.setPosition(point);  
+					// index++;   
+					// self.map.panTo(point);  //地图中心跟随 去掉
+
+			 },
+			beforeDestroy() {
+
+			},			 
+			mapPause(){
+				    let self = this;
+ 
+			 }
+		},
+	}
+</script>
+
+<style lang="less" scoped="">
+#map {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: absolute;
+}
+.controlPanle{
+	position:absolute;
+   bottom:10px;
+   left:0;
+   right:0;
+   margin:0 auto;
+}
+</style>
